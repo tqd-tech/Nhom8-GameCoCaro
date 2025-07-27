@@ -33,6 +33,125 @@ io.on("connection", (socket) => {
     userName = name;
     socket.emit("nameSet", name);
   });
+
+  socket.on("createRoom", () => {
+    if (!userName) {
+      socket.emit("needName");
+      return;
+    }
+    let code;
+    do {
+      code = randomRoomCode();
+    } while (rooms[code]);
+    rooms[code] = {
+      players: [
+        {
+          id: socket.id,
+          name: userName,
+          ready: false,
+          role: "host",
+          score: 0,
+        },
+      ],
+      board: createEmptyBoard(),
+      turn: 0,
+      started: false,
+      winner: null,
+    };
+    socket.join(code);
+    socket.emit("roomCreated", {
+      code,
+      players: rooms[code].players,
+      hostId: socket.id,
+    });
+    io.to(code).emit("updatePlayers", {
+      players: rooms[code].players,
+      hostId: socket.id,
+      started: rooms[code].started,
+    });
+  });
+
+  socket.on("joinRoom", (code) => {
+    if (!userName) {
+      socket.emit("needName");
+      return;
+    }
+    let room = rooms[code];
+    if (!room) {
+      socket.emit("roomNotExist");
+      return;
+    }
+    if (room.players.length >= 2) {
+      socket.emit("roomFull");
+      return;
+    }
+    if (room.players.find((p) => p.id === socket.id)) return;
+    room.players.push({
+      id: socket.id,
+      name: userName,
+      ready: false,
+      role: "guest",
+      score: 0,
+    });
+    socket.join(code);
+    io.to(code).emit("updatePlayers", {
+      players: room.players,
+      hostId: room.players[0].id,
+      started: room.started,
+    });
+    socket.emit("roomJoined", {
+      code,
+      players: room.players,
+      hostId: room.players[0].id,
+    });
+  });
+  socket.on("joinRoom", (code) => {
+    // ... giữ nguyên như cũ ...
+  });
+
+  // ... các phần đầu giữ nguyên ...
+
+  socket.on("setReady", (code) => {
+    let room = rooms[code];
+    if (!room) return;
+    let player = room.players.find((p) => p.id === socket.id);
+    if (!player) return;
+    player.ready = true;
+    io.to(code).emit("updatePlayers", {
+      players: room.players,
+      hostId: room.players[0].id,
+      started: room.started,
+    });
+
+    // TỰ ĐỘNG BẮT ĐẦU nếu đủ 2 người và cả 2 đã ready và chưa chơi
+    if (
+      room.players.length === 2 &&
+      room.players[0].ready &&
+      room.players[1].ready &&
+      !room.started
+    ) {
+      room.started = true; // Đánh dấu đã bắt đầu (ngăn double start)
+      // Gửi countdown cho phòng
+      io.to(code).emit("countdownStart", { seconds: 3 });
+      setTimeout(() => {
+        room.board = createEmptyBoard();
+        room.turn = 0;
+        room.winner = null;
+        room.players.forEach((p) => (p.ready = false)); // reset ready
+        io.to(code).emit("gameStart", {
+          board: room.board,
+          turn: room.turn,
+          names: room.players.map((p) => p.name),
+          scores: room.players.map((p) => p.score),
+          hostId: room.players[0].id,
+        });
+        io.to(code).emit("updatePlayers", {
+          players: room.players,
+          hostId: room.players[0].id,
+          started: true,
+        });
+      }, 3200); // Đợi cho đếm ngược 3,2,1,"Bắt đầu!"
+    }
 });
 
 server.listen(3000, () => {
