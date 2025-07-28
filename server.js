@@ -154,6 +154,118 @@ io.on("connection", (socket) => {
     }
 });
 
+   // Thêm xử lý sự kiện makeMove
+  socket.on("makeMove", ({ code, row, col, playerIndex }) => {
+    const room = rooms[code];
+    if (!room || !room.started) return;
+    // Kiểm tra người chơi hợp lệ
+    const player = room.players[playerIndex];
+    if (!player || player.id !== socket.id) return;
+    // Kiểm tra lượt
+    if (room.turn % 2 !== playerIndex) return;
+    // Kiểm tra ô đã đánh chưa
+    if (room.board[row][col]) return;
+    // Đánh cờ
+    const symbol = playerIndex === 0 ? "X" : "O";
+    room.board[row][col] = symbol;
+    // Kiểm tra thắng
+    const winResult = checkWin(room.board, row, col, symbol);
+    if (winResult) {
+      room.started = false;
+      room.players[playerIndex].score += 1;
+      io.to(code).emit("gameOver", {
+        board: room.board,
+        winCells: winResult.winCells,
+        winner: playerIndex,
+      });
+      io.to(code).emit("updatePlayers", {
+        players: room.players,
+        hostId: room.players[0].id,
+        started: false,
+      });
+      return;
+    }
+    // Kiểm tra hòa (full board)
+    const isDraw = room.board.flat().every((cell) => cell);
+    if (isDraw) {
+      room.started = false;
+      io.to(code).emit("gameOver", {
+        board: room.board,
+        winCells: [],
+        winner: null,
+      });
+      io.to(code).emit("updatePlayers", {
+        players: room.players,
+        hostId: room.players[0].id,
+        started: false,
+      });
+      return;
+    }
+    // Chuyển lượt
+    room.turn++;
+    io.to(code).emit("updateBoard", {
+      board: room.board,
+      turn: room.turn % 2,
+    });
+  });
+
+  // Thêm xử lý sự kiện leaveRoom
+  socket.on("leaveRoom", (code) => {
+    const room = rooms[code];
+    if (!room) return;
+    // Xóa người chơi khỏi phòng
+    room.players = room.players.filter((p) => p.id !== socket.id);
+    socket.leave(code);
+    // Nếu phòng còn 0 người thì xóa phòng
+    if (room.players.length === 0) {
+      delete rooms[code];
+    } else {
+      // Nếu còn người thì cập nhật lại host nếu cần
+      if (room.players.length > 0) {
+        room.players[0].role = "host";
+      }
+      io.to(code).emit("updatePlayers", {
+        players: room.players,
+        hostId: room.players[0]?.id,
+        started: room.started,
+      });
+      io.to(code).emit("playerLeft");
+    }
+  });
+
+  // Xử lý khi socket disconnect (đóng tab, reload, mất mạng)
+  socket.on("disconnect", () => {
+    // Tìm phòng mà socket này đang tham gia
+    for (const code in rooms) {
+      const room = rooms[code];
+      if (!room) continue;
+      const idx = room.players.findIndex((p) => p.id === socket.id);
+      if (idx !== -1) {
+        // Xóa người chơi khỏi phòng
+        room.players.splice(idx, 1);
+        socket.leave(code);
+        // Nếu phòng còn 0 người thì xóa phòng
+        if (room.players.length === 0) {
+          delete rooms[code];
+        } else {
+          // Nếu còn người thì cập nhật lại host nếu cần
+          if (room.players.length > 0) {
+            room.players[0].role = "host";
+          }
+          io.to(code).emit("updatePlayers", {
+            players: room.players,
+            hostId: room.players[0]?.id,
+            started: room.started,
+          });
+          io.to(code).emit("playerLeft");
+        }
+        break;
+      }
+    }
+  });
+
+  // ... phần còn lại giữ nguyên ...
+});
 server.listen(3000, () => {
   console.log("Server running at http://localhost:3000/");
 });
