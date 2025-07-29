@@ -266,6 +266,40 @@ io.on("connection", (socket) => {
 
   // ... phần còn lại giữ nguyên ...
 });
+
+// Trả về {winCells: [[r1,c1],[r2,c2],...]} nếu thắng, không thì trả về null
+function checkWin(board, row, col, symbol) {
+  const directions = [
+    [1, 0],
+    [0, 1],
+    [1, 1],
+    [1, -1],
+  ];
+  for (let [dx, dy] of directions) {
+    let cells = [[row, col]];
+    for (let dir = -1; dir <= 1; dir += 2) {
+      let x = row,
+        y = col;
+      while (true) {
+        x += dx * dir;
+        y += dy * dir;
+        if (
+          x >= 0 &&
+          x < board.length &&
+          y >= 0 &&
+          y < board.length &&
+          board[x][y] === symbol
+        ) {
+          if (dir === 1) cells.push([x, y]);
+          else cells.unshift([x, y]);
+        } else break;
+      }
+    }
+    if (cells.length >= 5) return { winCells: cells.slice(0, 5) };
+  }
+  return null;
+}
+
 server.listen(3000, () => {
   console.log("Server running at http://localhost:3000/");
 });
