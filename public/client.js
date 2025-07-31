@@ -208,3 +208,99 @@ function updateRoom(players) {
 
   updateRoomActions();
 }
+
+function updateRoomActions() {
+  roomActions.innerHTML = "";
+  let myIdx = getMyIndex();
+  let me = playerList[myIdx];
+  let other = playerList[1 - myIdx];
+
+  // Nếu chưa đủ 2 người
+  if (playerList.length < 2) {
+    if (isHost) {
+      roomActions.innerHTML = `<span>Chia sẻ mã phòng cho bạn bè để vào.</span>`;
+      setStatus("Chờ người chơi khác vào phòng...", "#e53935");
+    } else {
+      roomActions.innerHTML = `<span>Chờ chủ phòng bắt đầu.</span>`;
+      setStatus("Chờ chủ phòng bắt đầu.", "#e53935");
+    }
+    return;
+  }
+
+  // Đủ 2 người, chưa bắt đầu game
+  if (!gameStarted) {
+    if (!me.ready) {
+      let btn = document.createElement("button");
+      btn.textContent = "Sẵn sàng";
+      btn.className = "btn-ready-new";
+      btn.onclick = () => {
+        socket.emit("setReady", roomCode);
+        btn.disabled = true;
+      };
+      roomActions.appendChild(btn);
+      setStatus("Nhấn 'Sẵn sàng' để chuẩn bị trận đấu.", "#1976d2");
+    } else if (!other?.ready) {
+      setStatus("Chờ người chơi còn lại nhấn 'Sẵn sàng'...", "#1976d2");
+    } else {
+      setStatus("Cả 2 đã sẵn sàng, trận đấu sẽ tự động bắt đầu!", "#43cea2");
+      // Không cần nút nào nữa, server sẽ tự bắt đầu
+    }
+    return;
+  }
+
+  // Đang chơi
+  if (gameStarted) {
+    let turnIdx = boardTurnIndex();
+    let yourTurn = getMyIndex() === turnIdx;
+    setStatus(yourTurn ? "Đến lượt bạn!" : "Chờ đối thủ...", "#1976d2");
+  }
+}
+function isMyTurn(turnIdx) {
+  let myIdx = getMyIndex();
+  return myIdx === turnIdx && gameStarted;
+}
+function getMyIndex() {
+  for (let i = 0; i < playerList.length; i++) {
+    if (playerList[i]?.id === playerId) return i;
+  }
+  return -1;
+}
+
+function renderBoard() {
+  if (!board || board.length === 0) {
+    board = Array(BOARD_SIZE)
+      .fill()
+      .map(() => Array(BOARD_SIZE).fill(null));
+  }
+  boardDiv.innerHTML = "";
+  boardDiv.appendChild(winLineSVG);
+  for (let i = 0; i < BOARD_SIZE; i++) {
+    for (let j = 0; j < BOARD_SIZE; j++) {
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      if (board[i][j] === "X") cell.classList.add("x");
+      if (board[i][j] === "O") cell.classList.add("o");
+      if (winCells.some(([r, c]) => r === i && c === j))
+        cell.classList.add("win");
+      cell.textContent = board[i][j] || "";
+      cell.onclick = () => {
+        if (
+          !gameStarted ||
+          !isMyTurn(
+            playerList && playerList.length === 2 ? boardTurnIndex() : 0
+          )
+        )
+          return;
+        if (board[i][j]) return;
+        socket.emit("makeMove", {
+          code: roomCode,
+          row: i,
+          col: j,
+          playerIndex: getMyIndex(),
+        });
+      };
+      boardDiv.appendChild(cell);
+    }
+  }
+  drawWinLine();
+}
