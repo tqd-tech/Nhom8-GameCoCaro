@@ -304,3 +304,109 @@ function renderBoard() {
   }
   drawWinLine();
 }
+
+function boardTurnIndex() {
+  let x = 0,
+    o = 0;
+  for (let i = 0; i < BOARD_SIZE; i++)
+    for (let j = 0; j < BOARD_SIZE; j++)
+      if (board[i][j] === "X") x++;
+      else if (board[i][j] === "O") o++;
+  return x <= o ? 0 : 1;
+}
+
+function drawWinLine() {
+  winLineSVG.innerHTML = "";
+  if (!winCells || winCells.length < 2) return;
+  const boardRect = boardDiv.getBoundingClientRect();
+  const cellNodes = [...boardDiv.children].filter((c) =>
+    c.classList.contains("cell")
+  );
+  if (cellNodes.length < BOARD_SIZE * BOARD_SIZE) return;
+  let [r0, c0] = winCells[0];
+  let [r1, c1] = winCells[winCells.length - 1];
+  let idx0 = r0 * BOARD_SIZE + c0;
+  let idx1 = r1 * BOARD_SIZE + c1;
+  let cell0 = cellNodes[idx0];
+  let cell1 = cellNodes[idx1];
+  if (!cell0 || !cell1) return;
+  let rect0 = cell0.getBoundingClientRect();
+  let rect1 = cell1.getBoundingClientRect();
+  let x0 = rect0.left + rect0.width / 2 - boardRect.left;
+  let y0 = rect0.top + rect0.height / 2 - boardRect.top;
+  let x1 = rect1.left + rect1.width / 2 - boardRect.left;
+  let y1 = rect1.top + rect1.height / 2 - boardRect.top;
+  winLineSVG.setAttribute("width", boardRect.width);
+  winLineSVG.setAttribute("height", boardRect.height);
+  winLineSVG.innerHTML = `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="orange" stroke-width="6" stroke-linecap="round" />`;
+}
+
+function startCountdown(from, callback) {
+  let i = from;
+  status.style.fontSize = "2.3rem";
+  status.style.color = "#e53935";
+  countdownInterval = setInterval(() => {
+    if (i > 0) {
+      status.textContent = i;
+    } else if (i === 0) {
+      status.textContent = "Bắt đầu!";
+    } else {
+      clearInterval(countdownInterval);
+      status.style.fontSize = "";
+      status.style.color = "";
+      status.textContent = "";
+      callback && callback();
+    }
+    i--;
+  }, 700);
+}
+
+window.onload = () => {
+  showStep("name");
+  board = Array(BOARD_SIZE)
+    .fill()
+    .map(() => Array(BOARD_SIZE).fill(null));
+  renderBoard();
+  setStatus("Nhập tên để bắt đầu!", "#1976d2", "1.2rem");
+};
+
+// Đếm ngược khi bắt đầu bằng socket
+socket.on("countdownStart", ({ seconds }) => {
+  showCountdownModal(seconds || 3);
+});
+
+function showCountdownModal(seconds) {
+  // Tạo modal/hộp hội thoại nếu chưa có
+  let modal = document.getElementById("countdown-modal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "countdown-modal";
+    modal.style.position = "fixed";
+    modal.style.top = 0;
+    modal.style.left = 0;
+    modal.style.width = "100vw";
+    modal.style.height = "100vh";
+    modal.style.background = "rgba(20,40,80,0.88)";
+    modal.style.display = "flex";
+    modal.style.alignItems = "center";
+    modal.style.justifyContent = "center";
+    modal.style.zIndex = 9999;
+    modal.innerHTML = `<div id="countdown-num" style="font-size:7rem;color:#fff;font-weight:900;text-shadow:0 0 24px #43cea2,0 2px 16px #000;">3</div>`;
+    document.body.appendChild(modal);
+  }
+  let numDiv = document.getElementById("countdown-num");
+  let n = seconds;
+  numDiv.textContent = n;
+  modal.style.display = "flex";
+  let timer = setInterval(() => {
+    n--;
+    if (n > 0) {
+      numDiv.textContent = n;
+    } else if (n === 0) {
+      numDiv.textContent = "Bắt đầu!";
+    } else {
+      clearInterval(timer);
+      modal.style.display = "none";
+    }
+  }, 900);
+}
