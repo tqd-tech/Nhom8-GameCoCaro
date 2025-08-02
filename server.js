@@ -152,9 +152,9 @@ io.on("connection", (socket) => {
         });
       }, 3200); // Đợi cho đếm ngược 3,2,1,"Bắt đầu!"
     }
-});
+  });
 
-   // Thêm xử lý sự kiện makeMove
+  // Thêm xử lý sự kiện makeMove
   socket.on("makeMove", ({ code, row, col, playerIndex }) => {
     const room = rooms[code];
     if (!room || !room.started) return;
